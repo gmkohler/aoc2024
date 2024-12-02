@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use std::fs::File;
+use std::io;
 use std::io::{BufRead, BufReader};
 
 /**
@@ -32,36 +32,57 @@ So, in this example, 2 reports are safe.
 
 Analyze the unusual data from the engineers. How many reports are safe?
 */
-const ABS_DIFF: u8 = 3;
+
 fn main() {
-    let file = File::open("input.txt").expect("File should be openable.");
+    match count_safe_reports("input.txt") {
+        Ok(safe_count) => {
+            println!("Safe reports: {safe_count}");
+        }
+        Err(e) => eprintln!("Error reading the file: {e}"),
+    }
+}
+
+fn count_safe_reports(filename: &str) -> io::Result<usize> {
+    let file = File::open(filename)?;
     let reader = BufReader::new(file);
-    let mut num_safe_reports: u32 = 0;
-    'report: for line in reader.lines() {
-        let line = line.unwrap();
-        let report = line
+    let mut safe_count = 0;
+
+    for line in reader.lines() {
+        let line = line?;
+        let report: Vec<i8> = line
             .split_whitespace()
-            .map(|num| num.parse::<u8>().unwrap())
-            .collect::<Vec<u8>>();
-        let mut report = report.iter();
+            .filter_map(|s| s.parse::<i8>().ok())
+            .collect();
 
-        let first_level: &u8 = report.next().expect("Report should not be empty");
-        let mut prev_level: &u8 = report.next().expect("Report should have two entries");
-        let expected_ordering = first_level.cmp(prev_level);
-        if expected_ordering == Ordering::Equal || first_level.abs_diff(*prev_level) > ABS_DIFF {
-            continue;
+        if is_safe_report(&report) {
+            safe_count += 1;
         }
-
-        while let Some(current_level) = report.next() {
-            let ordering = prev_level.cmp(&current_level);
-            if ordering != expected_ordering || prev_level.abs_diff(current_level.clone()) > ABS_DIFF {
-                continue 'report;
-            } else {
-                prev_level = current_level;
-            }
-        }
-        num_safe_reports += 1;
     }
 
-    println!("Safe reports: {num_safe_reports}");
+    Ok(safe_count)
+}
+
+fn is_safe_report(report: &[i8]) -> bool {
+    const ABS_DIFF: i8 = 3;
+
+    if report.len() < 2 {
+        return false;
+    }
+
+    let mut is_increasing = true;
+    let mut is_decreasing = true;
+
+    for level in 1..report.len() {
+        let diff: i8 = report[level] - report[level - 1];
+        if diff == 0 || diff.abs() > ABS_DIFF {
+            return false;
+        }
+        if diff < 0 {
+            is_increasing = false;
+        } else {
+            is_decreasing = false;
+        }
+    }
+
+    is_decreasing || is_increasing
 }
