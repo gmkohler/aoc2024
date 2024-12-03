@@ -30,6 +30,28 @@ instruction produces 161 (2*4 + 5*5 + 11*8 + 8*5).
 
 Scan the corrupted memory for uncorrupted mul instructions. What do you get if you add up all of the
 results of the multiplications?
+
+--- Part Two ---
+
+As you scan through the corrupted memory, you notice that some of the conditional statements are also still intact. If you handle some of the uncorrupted conditional statements in the program, you might be able to get an even more accurate result.
+
+There are two new instructions you'll need to handle:
+
+    The do() instruction enables future mul instructions.
+    The don't() instruction disables future mul instructions.
+
+Only the most recent do() or don't() instruction applies. At the beginning of the program, mul instructions are enabled.
+
+For example:
+
+xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))
+
+This corrupted memory is similar to the example from before, but this time the mul(5,5) and mul(11,8) instructions are disabled because there is a don't() instruction before them. The other mul instructions function normally, including the one at the end that gets re-enabled by a do() instruction.
+
+This time, the sum of the results is 48 (2*4 + 8*5).
+
+Handle the new instructions; what do you get if you add up all of the results of just the enabled multiplications?
+
 */
 struct Multiplier {
     a: i16,
@@ -55,17 +77,33 @@ fn main() {
 }
 
 fn parse_multipliers(filename: &str) -> io::Result<Vec<Multiplier>> {
-    let r: Regex = Regex::new(r"mul\((\d{1,3}),(\d{1,3})\)").unwrap(); // learn about custom error types
+    let r: Regex = Regex::new(
+        r"(?<do>do)\(\)|(?<dont>don't)\(\)|(?<mul>mul)\((?<mul_a>\d{1,3}),(?<mul_b>\d{1,3})\)",
+    )
+    .unwrap(); // learn about custom error types
     let file = File::open(filename)?;
     let buf = BufReader::new(file);
     let mut results = Vec::<Multiplier>::new();
+    let mut should_add: bool = true;
 
     for line in buf.lines() {
         let line = line?;
-        for (_, [a, b]) in r.captures_iter(line.as_str()).map(|c| c.extract()) {
-            let a: i16 = a.parse().unwrap(); // learn about custom error types
-            let b: i16 = b.parse().unwrap(); // learn about custom error types
-            results.push(Multiplier { a, b });
+        let captures_iter = r.captures_iter(line.as_str());
+        for capture in captures_iter {
+            if capture.name("do").is_some() {
+                should_add = true;
+            } else if capture.name("dont").is_some() {
+                should_add = false;
+            } else if capture.name("mul").is_some() {
+                // nest to avoid logging "unknown" when in "don't" mode:
+                if should_add {
+                    let a: i16 = capture.name("mul_a").unwrap().as_str().parse().unwrap();
+                    let b: i16 = capture.name("mul_b").unwrap().as_str().parse().unwrap();
+                    results.push(Multiplier { a, b });
+                }
+            } else {
+                eprintln!("unknown capture group");
+            }
         }
     }
     Ok(results)
